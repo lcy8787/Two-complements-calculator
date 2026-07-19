@@ -234,77 +234,83 @@
         }
 
         function calculateTwosComplement() {
-            const inputStr = document.getElementById("numberInput").value.trim();
-            const inputType = document.getElementById("inputType").value;
-            const bitLength = parseInt(document.getElementById("bitLength").value);
-            
-            document.getElementById("errorMessage").style.display = "none";
+    const inputStr = document.getElementById("numberInput").value.trim();
+    const inputType = document.getElementById("inputType").value;
+    const bitLength = parseInt(document.getElementById("bitLength").value);
+    
+    document.getElementById("errorMessage").style.display = "none";
 
-            if (!inputStr) {
-                showError("請輸入數值！");
-                return;
-            }
+    if (!inputStr) {
+        showError("請輸入數值！");
+        return;
+    }
 
-            let decimalValue = 0;
+    let decimalValue = 0;
 
-            // 1. 解析輸入數值並取得絕對值
-            if (inputType === "10") {
-                if (!/^-?\d+$/.test(inputStr)) {
-                    showError("請輸入有效的 10 進制整數！");
-                    return;
-                }
-                decimalValue = parseInt(inputStr, 10);
-            } else {
-                if (!/^[01]+$/.test(inputStr)) {
-                    showError("請輸入有效的 2 進制數值 (只包含 0 或 1)！");
-                    return;
-                }
-                // 處理使用者直接輸入二進制的情況 (將其視為絕對值的 magnitude)
-                decimalValue = parseInt(inputStr, 2);
-            }
-
-            let absValue = Math.abs(decimalValue);
-
-            // 2. 檢查是否超出該位元長度可表示的範圍 
-            // N-bit 的最大絕對值轉換為 2^(n-1)
-            let maxMagnitude = Math.pow(2, bitLength - 1);
-            if (absValue > maxMagnitude) {
-                showError(`數值的絕對值 (${absValue}) 超出了 ${bitLength}-bit 有符號整數的範圍 (最大至 ${maxMagnitude})。`);
-                return;
-            }
-
-            // 3. 計算步驟
-            // Step 1: 原始數值二進制 (補齊前導 0)
-            let originalBin = absValue.toString(2).padStart(bitLength, '0');
-            
-            // Step 2: 一補碼 (反轉 0->1, 1->0)
-            let onesComplement = originalBin.split('').map(bit => bit === '0' ? '1' : '0').join('');
-
-            // Step 3: 二補碼 (一補碼 + 1)
-            // 將一補碼轉回數字加1後再轉為二進制。使用 BigInt 避免 32-bit 以上的操作精度流失 (雖然目前只有16bit，但這是好習慣)
-            let twosValue = BigInt("0b" + onesComplement) + 1n;
-            let twosComplement = twosValue.toString(2).padStart(bitLength, '0');
-            
-            // 處理溢位狀況 (例如 0 的反轉是 11111111，加 1 會變成 100000000，需要切掉最前面的 1)
-            if (twosComplement.length > bitLength) {
-                twosComplement = twosComplement.slice(-bitLength);
-            }
-
-            // 4. 更新畫面
-            // 為了美觀，將二進制每 4 位數加一個空格
-            const formatBin = (bin) => bin.match(/.{1,4}/g).join(' ');
-
-            document.getElementById("step1-bin").innerText = formatBin(originalBin);
-            document.getElementById("step1-exp").innerText = `數值 ${absValue} 的二進制表示`;
-
-            document.getElementById("step2-bin").innerText = formatBin(onesComplement);
-
-            document.getElementById("step3-bin").innerText = formatBin(twosComplement);
-            document.getElementById("step3-exp").innerText = `此為 -${absValue} 的電腦底層二補碼表示法`;
-
-            // 顯示結果區塊
-            document.getElementById("resultArea").style.display = "block";
+    // 1. 解析輸入數值
+    if (inputType === "10") {
+        if (!/^-?\d+$/.test(inputStr)) {
+            showError("請輸入有效的 10 進制整數！");
+            return;
         }
+        decimalValue = parseInt(inputStr, 10);
+    } else {
+        if (!/^[01]+$/.test(inputStr)) {
+            showError("請輸入有效的 2 進制數值 (只包含 0 或 1)！");
+            return;
+        }
+        // 將二進制視為無符號數值先轉回 10 進制進行範圍檢查
+        decimalValue = parseInt(inputStr, 2);
+    }
+
+    // ==========================================
+    // 2. [修改部分] 嚴格檢查有符號整數 (二補碼) 的範圍 
+    // 例如 8-bit: 最小值 -128，最大值 127
+    // 例如 16-bit: 最小值 -32768，最大值 32767
+    // ==========================================
+    let maxVal = Math.pow(2, bitLength - 1) - 1; 
+    let minVal = -Math.pow(2, bitLength - 1);    
+
+    if (decimalValue > maxVal || decimalValue < minVal) {
+        showError(`輸入數值 (${decimalValue}) 超出了 ${bitLength}-bit 二補碼的有效範圍 (${minVal} 至 ${maxVal})。`);
+        return;
+    }
+
+    // 取得絕對值以進行後續的二進制轉換推導
+    let absValue = Math.abs(decimalValue);
+
+    // 3. 計算步驟
+    // Step 1: 原始數值絕對值的二進制 (補齊前導 0)
+    // 即使是輸入 -128，絕對值 128 的 8-bit 二進制剛好是 10000000
+    let originalBin = absValue.toString(2).padStart(bitLength, '0');
+    
+    // Step 2: 一補碼 (反轉 0->1, 1->0)
+    let onesComplement = originalBin.split('').map(bit => bit === '0' ? '1' : '0').join('');
+
+    // Step 3: 二補碼 (一補碼 + 1)
+    let twosValue = BigInt("0b" + onesComplement) + 1n;
+    let twosComplement = twosValue.toString(2).padStart(bitLength, '0');
+    
+    // 處理溢位狀況 (確保長度維持在使用者選擇的 bitLength)
+    if (twosComplement.length > bitLength) {
+        twosComplement = twosComplement.slice(-bitLength);
+    }
+
+    // 4. 更新畫面
+    // 將二進制每 4 位數加一個空格 (方便閱讀)
+    const formatBin = (bin) => bin.match(/.{1,4}/g).join(' ');
+
+    document.getElementById("step1-bin").innerText = formatBin(originalBin);
+    document.getElementById("step1-exp").innerText = `數值 ${absValue} 的二進制表示`;
+
+    document.getElementById("step2-bin").innerText = formatBin(onesComplement);
+
+    document.getElementById("step3-bin").innerText = formatBin(twosComplement);
+    document.getElementById("step3-exp").innerText = `此為 -${absValue} 的電腦底層二補碼表示法`;
+
+    // 顯示結果區塊
+    document.getElementById("resultArea").style.display = "block";
+}
     </script>
 </body>
 </html>
